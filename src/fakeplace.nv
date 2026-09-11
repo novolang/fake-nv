@@ -1,0 +1,231 @@
+// fakeplace.nv — places and telephone numbers, which are the two things
+// a locale changes most.
+//
+// AN ADDRESS IS WHERE A LOCALE STOPS BEING A TABLE OF WORDS.  Swapping
+// English names for Danish ones is a table; swapping an address is a
+// different SHAPE:
+//
+//   en   1234 Elm Street          da   Elmegade 12
+//        Springfield, IL 62704         2200 København N
+//        telephone (555) 014-0198      telephone 32 14 01 98
+//
+// The number goes before the street name in one and after it in the
+// other; the postcode goes after the city in one and before it in the
+// other; one has a state and the other does not; one postcode is five
+// digits and the other four; one telephone number has an area code and
+// the other does not.  A package that generated the English shape with
+// Danish words would produce data a Danish reader can see is wrong, and
+// the locale would be decoration.
+//
+// SO `address` IS A STRUCT AND `formatted` IS A FUNCTION OF IT.  The
+// fields are the parts; the rendering is the locale's.  A caller
+// filling a form wants the parts, a caller filling a text field wants
+// the rendering, and neither should have to take the other apart.
+//
+// NOTHING HERE IS A REAL ADDRESS.  The street names are drawn from a
+// table and the numbers from a range, so a generated address is
+// syntactically an address and geographically nowhere — which is what a
+// fixture should be.  The postcodes ARE in the ranges their countries
+// use, because a system that validates a postcode should be exercised
+// with one that passes.
+
+use fake
+
+// A street name with no number: `Elm Street`, `Elmegade`.
+//
+// ```novo
+// use fake
+// use fakeplace
+//
+// fn main() [io]
+//     println(fake.one(fakeplace.street_name(FakeDa), 42))
+// ```
+pub fn street_name(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakeplace.street_name")
+
+// A street line, with the number where the locale puts it.
+//
+// `1234 Elm Street` in `FakeEn` and `Elmegade 12` in `FakeDa`.  The
+// difference is the reason this is a generator rather than a
+// concatenation at the call site.
+//
+// ```novo
+// use fake
+// use fakeplace
+//
+// fn main() [io]
+//     println(fake.one(fakeplace.street_line(FakeDa), 42))
+// ```
+pub fn street_line(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakeplace.street_line")
+
+// A city name.
+//
+// ```novo
+// use fake
+// use fakeplace
+//
+// fn main() [io]
+//     println(fake.one(fakeplace.city(FakeEn), 42))
+// ```
+pub fn city(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakeplace.city")
+
+// A postcode in the shape the locale uses.
+//
+// Five digits in `FakeEn` and four in `FakeDa`, and both inside the
+// ranges their countries actually assign — because a system that
+// validates a postcode should be exercised with one that passes, and a
+// fixture that produced `00000` would make a validation test look like
+// a bug in the validator.
+//
+// ```novo
+// use fake
+// use fakeplace
+//
+// fn main() [io]
+//     println(fake.one(fakeplace.postcode(FakeDa), 42))
+// ```
+pub fn postcode(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakeplace.postcode")
+
+// A first-level administrative region, or the empty string where the
+// locale has none.
+//
+// A state in `FakeEn`; empty in `FakeDa`, because Denmark's regions are
+// not part of a postal address and inventing one would produce a line
+// no Danish system expects.  An empty answer is what `formatted`
+// composes against.
+//
+// ```novo
+// use fake
+// use fakeplace
+//
+// fn main() [io]
+//     println("[${fake.one(fakeplace.region(FakeDa), 42)}]")   // []
+// ```
+pub fn region(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakeplace.region")
+
+// A country name in the locale's own language.
+//
+// ```novo
+// use fake
+// use fakeplace
+//
+// fn main() [io]
+//     println(fake.one(fakeplace.country(FakeDa), 42))      // Danmark
+// ```
+pub fn country(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakeplace.country")
+
+// The locale's ISO 3166-1 alpha-2 country code.
+//
+// A function rather than a generator, because there is nothing random
+// about it: `FakeEn` is `US` and `FakeDa` is `DK`.  It is here so that a
+// caller filling a form with a country SELECT does not have to keep its
+// own table beside this package's.
+//
+// ```novo
+// use fakeplace
+//
+// fn main() [io]
+//     println(fakeplace.country_code(FakeDa))               // DK
+// ```
+pub fn country_code(loc: FakeLocale) -> Str
+    todo("fake-nv.fakeplace.country_code")
+
+// A telephone number in the locale's shape.
+//
+// `(555) 014-0198` in `FakeEn` — area code 555, which North American
+// numbering reserves for fiction — and `32 14 01 98` in `FakeDa`, which
+// is eight digits in pairs with no area code at all, because Denmark
+// does not have area codes.
+//
+// ```novo
+// use fake
+// use fakeplace
+//
+// fn main() [io]
+//     println(fake.one(fakeplace.phone(FakeDa), 42))
+// ```
+pub fn phone(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakeplace.phone")
+
+// A telephone number in E.164: `+4532140198`.
+//
+// The form a system stores rather than the form a person writes, and
+// the one an international field expects.  Separate from `phone`
+// because a fixture that used the local form where E.164 was wanted
+// fails a validation that has nothing wrong with it.
+//
+// ```novo
+// use fake
+// use fakeplace
+//
+// fn main() [io]
+//     println(fake.one(fakeplace.phone_e164(FakeDa), 42))
+// ```
+pub fn phone_e164(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakeplace.phone_e164")
+
+// An address whose parts agree with each other.
+//
+// The postcode belongs to the city, the region is the city's, and the
+// country is the locale's — which a caller drawing five generators
+// separately would not get, and which is exactly what a system
+// validating an address against a postcode database is looking at.
+//
+// ```novo
+// use fake
+// use fakeplace
+//
+// fn main() [io]
+//     let a = fake.one(fakeplace.address(FakeDa), 42)
+//     println("${a.postcode} ${a.city}")
+// ```
+pub struct FakeAddress
+    // The street with its number, in the locale's order.
+    street: Str
+    // The city.
+    city: Str
+    // The first-level region, or empty where the locale has none.
+    region: Str
+    // The postcode, in the locale's shape.
+    postcode: Str
+    // The country, in the locale's own language.
+    country: Str
+    // The ISO 3166-1 alpha-2 code.
+    country_code: Str
+
+// A whole address, drawn once so the parts agree.
+//
+// ```novo
+// use fake
+// use fakeplace
+//
+// fn main() [io]
+//     println(fake.one(fakeplace.address(FakeEn), 42).country_code)   // US
+// ```
+pub fn address(loc: FakeLocale) -> PropStrategy<FakeAddress>
+    todo("fake-nv.fakeplace.address")
+
+// An address rendered the way the locale writes one, with newlines.
+//
+// The rendering is the locale's and not the caller's: the postcode goes
+// after the city in `FakeEn` and before it in `FakeDa`, and a caller
+// that joined the fields itself would get one of the two wrong.
+//
+// ```novo
+// use fake
+// use fakeplace
+//
+// fn main() [io]
+//     let a = fake.one(fakeplace.address(FakeDa), 42)
+//     println(fakeplace.formatted(FakeDa, a))
+//     // : Elmegade 12
+//     // : 2200 København N
+//     // : Danmark
+// ```
+pub fn formatted(loc: FakeLocale, a: FakeAddress) -> Str
+    todo("fake-nv.fakeplace.formatted")

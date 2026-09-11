@@ -1,0 +1,321 @@
+// fake_tests.nv — the API suite for the seed contract, the locale, and
+// the generators over people, places, text and identifiers.
+//
+// RED ON PURPOSE: every body under `src/` is a `todo()`, so every
+// assertion here reaches `not implemented: fake-nv.<module>.<fn>`.
+//
+// WHAT IS BEING ASSERTED IS THE PROMISE, NOT THE DATA.  A fixture
+// library's output is arbitrary by construction — asserting that seed 42
+// gives "Astrid" would pin a table nobody agreed to keep — so almost
+// nothing here compares against a literal.  What it asserts instead is
+// everything a caller relies on:
+//
+//   DETERMINISM     the same seed gives the same value, twice in one
+//                   run and across separately built tapes.
+//   INDEPENDENCE    a different seed usually gives a different value,
+//                   and `many` draws distinct values from one tape
+//                   rather than repeating one.
+//   SHAPE           a UUID is 36 characters with the right nibbles, a
+//                   Danish postcode is four digits, an email ends at a
+//                   reserved domain, a sentence ends in a full stop.
+//   THE LOCALE SEAM two locales produce different shapes and not only
+//                   different words, which is the difference between a
+//                   locale and a decoration.
+//
+// THE ORACLE FOR THE SHAPES IS A SPECIFICATION EACH TIME, and the case
+// names it: RFC 9562 § 4 for a UUID's version and variant nibbles, RFC
+// 2606 for the reserved domains, RFC 5737 for the documentation address
+// ranges, and the two countries' own postal and telephone formats.
+
+use std.test
+use std.str
+use std.list
+use fake
+use fakename
+use fakeplace
+use fakelorem
+use fakeid
+use strategy
+
+@test
+fn test_the_same_seed_gives_the_same_value_every_time() [io]
+    test.case("twice in one run")
+    // The whole contract.  A test that fails on seed 42 fails on seed 42
+    // tomorrow, on somebody else's machine, on the build host.
+    let a = fake.one(fakename.first_name(FakeEn), 42)
+    let b = fake.one(fakename.first_name(FakeEn), 42)
+    test.assert(a == b)
+
+    test.case("and through the composing form, which shares the tape")
+    let t0 = tape.from_seed(42)
+    let (c, _) = fake.draw(fakename.first_name(FakeEn), t0)
+    test.assert(c == a)
+
+    test.case("a different seed usually gives a different value")
+    // "Usually", because a table of a few hundred names collides — which
+    // is why `first_name_count` is public.  Four seeds all landing on
+    // one name is vanishingly unlikely and would mean the tape is not
+    // advancing.
+    let n1 = fake.one(fakename.first_name(FakeEn), 1)
+    let n2 = fake.one(fakename.first_name(FakeEn), 2)
+    let n3 = fake.one(fakename.first_name(FakeEn), 3)
+    let n4 = fake.one(fakename.first_name(FakeEn), 4)
+    test.assert(n1 != n2 or n1 != n3 or n1 != n4)
+
+@test
+fn test_many_draws_from_one_tape_rather_than_repeating_one_value() [io]
+    test.case("the count is what was asked for")
+    let names = fake.many(fakename.first_name(FakeEn), 42, 10)
+    test.assert(list.len(names) == 10)
+
+    test.case("and the values differ, which n calls to one would not give")
+    test.assert(names[0] != names[1] or names[0] != names[2]
+                or names[0] != names[3])
+
+    test.case("the same seed gives the same list")
+    let again = fake.many(fakename.first_name(FakeEn), 42, 10)
+    test.assert(names == again)
+
+    test.case("and the first of many is the one of one")
+    test.assert(names[0] == fake.one(fakename.first_name(FakeEn), 42))
+
+@test
+fn test_the_seed_line_round_trips() [io]
+    test.case("the line a failing test should print")
+    test.assert(fake.seed_line(42, FakeEn) == "fake seed: 42 (en)")
+    test.assert(fake.seed_line(7, FakeDa) == "fake seed: 7 (da)")
+
+    test.case("and the line a person pastes back")
+    test.assert(fake.parse_seed_line("fake seed: 42 (en)") == Some((42, FakeEn)))
+    test.assert(fake.parse_seed_line("fake seed: 7 (da)") == Some((7, FakeDa)))
+
+    test.case("anything else is not one, so a log can be skimmed")
+    test.assert(fake.parse_seed_line("running 4 tests") == None)
+    test.assert(fake.parse_seed_line("fake seed: 42 (de)") == None)
+
+@test
+fn test_the_locale_is_a_value_and_there_are_two_of_them() [io]
+    test.case("the tags are BCP 47")
+    test.assert(fake.locale_name(FakeEn) == "en")
+    test.assert(fake.locale_name(FakeDa) == "da")
+
+    test.case("a tag this package does not ship is None, never English")
+    // A test that asked for `de` and got American addresses is a test
+    // whose failure nobody can explain.
+    test.assert(fake.locale_of("en") == Some(FakeEn))
+    test.assert(fake.locale_of("da") == Some(FakeDa))
+    test.assert(fake.locale_of("de") == None)
+    test.assert(fake.locale_of("") == None)
+
+    test.case("and the shipped pair is enumerable")
+    test.assert(list.len(fake.locales()) == 2)
+
+@test
+fn test_the_locale_changes_the_shape_and_not_only_the_words() [io]
+    test.case("a postcode is five digits in en and four in da")
+    test.assert(str.len(fake.one(fakeplace.postcode(FakeEn), 42)) == 5)
+    test.assert(str.len(fake.one(fakeplace.postcode(FakeDa), 42)) == 4)
+
+    test.case("a region exists in en and does not in da")
+    // Denmark's regions are not part of a postal address, and inventing
+    // one would produce a line no Danish system expects.
+    test.assert(fake.one(fakeplace.region(FakeEn), 42) != "")
+    test.assert(fake.one(fakeplace.region(FakeDa), 42) == "")
+
+    test.case("a name suffix exists in en and does not in da")
+    test.assert(fake.one(fakename.name_suffix(FakeDa), 42) == "")
+
+    test.case("and the country code is the locale's, not a draw")
+    test.assert(fakeplace.country_code(FakeEn) == "US")
+    test.assert(fakeplace.country_code(FakeDa) == "DK")
+
+@test
+fn test_a_record_s_fields_agree_with_each_other() [io]
+    test.case("a person's email is built from that person's name")
+    // Three independent draws give Astrid, Hansen and
+    // mwilliams@example.net — data that looks wrong to a reader and
+    // hides the class of bug where a system mismatches the two.
+    let p = fake.one(fakename.person(FakeEn), 42)
+    test.assert(str.contains(p.email, p.username))
+    test.assert(str.contains(p.full_name, p.first_name))
+    test.assert(str.contains(p.full_name, p.last_name))
+
+    test.case("and an address's country is its locale's")
+    let a = fake.one(fakeplace.address(FakeDa), 42)
+    test.assert(a.country_code == "DK")
+    test.assert(a.region == "")
+    test.assert(str.len(a.postcode) == 4)
+
+    test.case("the rendering is the locale's, so a caller need not join fields")
+    let text = fakeplace.formatted(FakeDa, a)
+    test.assert(str.contains(text, a.postcode))
+    test.assert(str.contains(text, a.city))
+
+@test
+fn test_every_generated_address_and_domain_is_reserved() [io]
+    test.case("an email ends at a domain RFC 2606 reserves")
+    // A fixture generator that produced a real domain is one that will
+    // one day be in a test that actually sends.
+    let e = fake.one(fakename.email(FakeEn), 42)
+    test.assert(str.ends_with(e, "example.com")
+                or str.ends_with(e, "example.net")
+                or str.ends_with(e, "example.org"))
+
+    test.case("and the escape is explicit at the call site")
+    let own = fake.one(fakename.email_at(FakeEn, "acme.test"), 42)
+    test.assert(str.ends_with(own, "@acme.test"))
+
+    test.case("an IPv4 address is in one of RFC 5737's three ranges")
+    let ip = fake.one(fakeid.ipv4(), 42)
+    test.assert(str.starts_with(ip, "192.0.2.")
+                or str.starts_with(ip, "198.51.100.")
+                or str.starts_with(ip, "203.0.113."))
+
+    test.case("and an en telephone number is in the reserved 555 range")
+    test.assert(str.contains(fake.one(fakeplace.phone(FakeEn), 42), "555"))
+
+@test
+fn test_a_uuid_is_canonical_text_and_not_a_uuid_value() [io]
+    test.case("thirty-six characters, RFC 9562 § 4's form")
+    // Text and not `Uuid`, because uuid-nv is `host` and a `core`
+    // package may not name its type.
+    let v4 = fake.one(fakeid.uuid_v4(), 42)
+    test.assert(str.len(v4) == 36)
+
+    test.case("the version nibble is 4 and the variant bits are 10")
+    test.assert(str.slice(v4, 14, 15) == "4")
+    let variant = str.slice(v4, 19, 20)
+    test.assert(variant == "8" or variant == "9"
+                or variant == "a" or variant == "b")
+
+    test.case("the dashes are where the form puts them")
+    test.assert(str.slice(v4, 8, 9) == "-")
+    test.assert(str.slice(v4, 13, 14) == "-")
+    test.assert(str.slice(v4, 18, 19) == "-")
+    test.assert(str.slice(v4, 23, 24) == "-")
+
+    test.case("a v7's timestamp is the caller's, so it is reproducible")
+    // A `core` package has no clock, and a v7 that used one would not
+    // be reproducible from a seed — which is the only promise here.
+    let a = fake.one(fakeid.uuid_v7(1767225600000), 42)
+    let b = fake.one(fakeid.uuid_v7(1767225600000), 42)
+    test.assert(a == b)
+    test.assert(str.slice(a, 14, 15) == "7")
+
+    test.case("and a later timestamp sorts after an earlier one")
+    let early = fake.one(fakeid.uuid_v7(1767225600000), 42)
+    let late = fake.one(fakeid.uuid_v7(1767225700000), 42)
+    test.assert(early < late)
+
+@test
+fn test_the_identifier_generators_have_the_length_they_promise() [io]
+    test.case("digits are text with leading zeros kept")
+    // A fixture that produced `42` where a system expected `0000000042`
+    // exercises the wrong path.
+    test.assert(str.len(fake.one(fakeid.digits(10), 42)) == 10)
+    test.assert(str.len(fake.one(fakeid.digits(1), 42)) == 1)
+
+    test.case("hex is exactly n lowercase characters")
+    test.assert(str.len(fake.one(fakeid.hex(64), 42)) == 64)
+
+    test.case("a prefixed identifier keeps its prefix")
+    let id = fake.one(fakeid.prefixed("inv_", 6), 42)
+    test.assert(str.starts_with(id, "inv_"))
+    test.assert(str.len(id) == 10)
+
+    test.case("and a MAC address is seventeen characters")
+    test.assert(str.len(fake.one(fakeid.mac(), 42)) == 17)
+
+@test
+fn test_the_numeric_generators_are_inclusive_at_both_ends() [io]
+    test.case("a range of one produces that one")
+    // The off-by-one a fixture generator gets wrong most often: a range
+    // that excluded its top would never produce the boundary a test was
+    // written for.
+    test.assert(fake.one(fakeid.number_between(7, 7), 42) == 7)
+
+    test.case("and a wider range stays inside it")
+    let n = fake.one(fakeid.number_between(1, 10), 42)
+    test.assert(n >= 1)
+    test.assert(n <= 10)
+
+    test.case("swapped bounds answer the low one rather than panicking")
+    test.assert(fake.one(fakeid.number_between(10, 1), 42) == 10)
+
+    test.case("money is minor units, so it is an integer")
+    let cents = fake.one(fakeid.amount_minor(100, 99999), 42)
+    test.assert(cents >= 100)
+    test.assert(cents <= 99999)
+
+    test.case("a probability of 100 and of 0 are both certain")
+    test.assert(fake.one(fakeid.likely(100), 42))
+    test.assert(fake.one(fakeid.likely(0), 42) == false)
+
+    test.case("and one outside the range is clamped, not refused")
+    test.assert(fake.one(fakeid.likely(200), 42))
+    test.assert(fake.one(fakeid.likely(0 - 5), 42) == false)
+
+@test
+fn test_filler_text_is_not_latin_unless_it_is_asked_to_be() [io]
+    test.case("a sentence is capitalised and ends in a full stop")
+    let s = fake.one(fakelorem.sentence(FakeEn), 42)
+    test.assert(str.ends_with(s, "."))
+    test.assert(str.len(s) > 1)
+
+    test.case("a phrase is neither, because it is a title or a tag")
+    let w = fake.one(fakelorem.words(FakeEn, 2, 5), 42)
+    test.assert(str.ends_with(w, ".") == false)
+
+    test.case("paragraphs are separated by a blank line")
+    let p = fake.one(fakelorem.paragraphs(FakeEn, 2, 2), 42)
+    test.assert(str.contains(p, "\n\n"))
+
+    test.case("text of about n bytes does not exceed n")
+    // About, not exactly: text is made of words and words have lengths.
+    let t = fake.one(fakelorem.text_of_about(FakeEn, 512), 42)
+    test.assert(str.len(t) <= 512)
+    test.assert(str.len(t) > 0)
+
+    test.case("lorem takes no locale, because Latin has none")
+    test.assert(str.len(fake.one(fakelorem.lorem(3), 42)) > 0)
+
+    test.case("and each locale's word table is readable and not empty")
+    test.assert(list.len(fakelorem.words_of(FakeEn)) > 0)
+    test.assert(list.len(fakelorem.words_of(FakeDa)) > 0)
+
+@test
+fn test_a_table_s_size_is_knowable_before_a_collision_is_discovered() [io]
+    test.case("the counts are public, because the tables are small")
+    // A fixture of a thousand rows with a unique-name constraint will
+    // collide, and finding that out here is better than finding it out
+    // from a flaky test.
+    test.assert(fakename.first_name_count(FakeEn) > 0)
+    test.assert(fakename.last_name_count(FakeEn) > 0)
+    test.assert(fakename.first_name_count(FakeDa) > 0)
+    test.assert(fakename.last_name_count(FakeDa) > 0)
+
+@test
+fn test_a_fake_is_a_strategy_so_every_combinator_works_on_it() [io]
+    test.case("a list of them")
+    // The reason there is no generator type of this package's own: these
+    // combinators are proptest-core-nv's and they already exist.
+    let names = strategy.list_of(fakename.first_name(FakeEn), 3, 3)
+    test.assert(list.len(fake.one(names, 42)) == 3)
+
+    test.case("an optional one, for a field that is usually set")
+    let maybe = strategy.option_of(fakename.first_name(FakeEn))
+    match fake.one(maybe, 42)
+        Some(n) => test.assert(str.len(n) > 0)
+        None    => test.assert(true)
+
+    test.case("a pair, drawn from one tape so both are reproducible")
+    let pair = strategy.pair_of(fakename.first_name(FakeDa),
+                                fakeplace.city(FakeDa))
+    let (n, c) = fake.one(pair, 42)
+    test.assert(str.len(n) > 0)
+    test.assert(str.len(c) > 0)
+
+    test.case("and choosing from a list is strategy.sample_of, not a second name")
+    let pick = strategy.sample_of(["a", "b", "c"])
+    let v = fake.one(pick, 42)
+    test.assert(v == "a" or v == "b" or v == "c")

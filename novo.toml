@@ -1,0 +1,63 @@
+[package]
+name        = "fake-nv"
+version     = "0.0.1"
+description = "Deterministic fixture data from a seed: names, addresses, emails, phone numbers, sentences, dates, numbers in a range, choices and UUIDs, in English and Danish, with the locale a value the caller passes.  A fake IS a proptest-core-nv strategy rather than a new kind of thing, so a fixture and a property draw from the same tape and shrink by the same rule — and a test that prints its seed reproduces exactly.  Interface only — every body is a todo()."
+license     = "Apache-2.0"
+
+# An INTERFACE release: every `pub fn` body is a `todo()`, so the
+# signatures and the effect rows are published and nothing is
+# implemented.  `novo pkg publish` recognises the shape and requires
+# both the draft stability and the 0.0.x version; the first
+# implementation is the 0.1.0 published over it.
+stability   = "draft"
+
+# `core`, and that is what decided the whole design rather than a label
+# applied afterwards — see the README's "Why a fake is a strategy".
+#
+# A `core` package may depend only on `core` packages, and rand-nv is
+# `host` (it declares `[fs, rand]`, because half of it is the operating
+# system's CSPRNG).  So the alternative shape the plan offered — a
+# generator that is a function of a rand-nv state — is not available at
+# this layer at all, and proptest-core-nv's `Tape` is.  That is a
+# refusal the layer rules made, not a preference.
+#
+# The same rule reaches uuid-nv, which is `host` because it depends on
+# rand-nv: `fakeid.uuid_v4` therefore answers the canonical lowercase
+# TEXT of a UUID rather than a `Uuid`, and a caller that wants the type
+# hands the text to `uuid.parse`.
+#
+# No device claim.  Every generator here answers a `Str` or a list, and
+# the embedded runtime links neither.
+layer       = "core"
+
+category    = "testing"
+
+tags        = ["fake", "faker", "fixtures", "test-data", "seeded", "deterministic", "locale"]
+repository  = "https://github.com/novolang/fake-nv"
+maintainers = ["novo-lang"]
+novo        = ">= 0.8.9"
+
+# A library: no `main`, so `novo pkg build` type-checks and
+# effect-checks every module under `src/` and writes no binary.
+
+[docs.pages]
+"README.md" = "Fixture data that is the same every run"
+
+[dependencies]
+# The tape, and the strategy type a fake IS.  A `Fake*` generator is a
+# `PropStrategy<T>` and not a new kind of thing, so a fixture composes
+# with `strategy.list_of`, `strategy.option_of` and `strategy.map`, and
+# a property test and a fixture draw from one source.  The README's
+# "Why a fake is a strategy" argues it, including the part that is not
+# obvious: a fake DOES shrink, because shrinking in that package is
+# arithmetic on the choice sequence rather than on the value.
+proptest-core-nv = "^0.0.1"
+
+# The civil date a fake date is.  `core`, clockless, and the type every
+# other package on this grid that means "a date" already uses — which is
+# the whole reason not to answer a `Str` and make every caller parse it.
+#
+# NOT chrono-nv: a fake date has no time zone and no "now", and the
+# `host` half of that pair is exactly the part a `core` package may not
+# reach.
+calendar-nv = "^0.0.2"

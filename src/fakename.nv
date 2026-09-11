@@ -1,0 +1,242 @@
+// fakename.nv — people: names, the things built out of names, and the
+// consistency between them.
+//
+// A PERSON IS NOT THREE INDEPENDENT DRAWS.  `first_name`, `last_name`
+// and `email` drawn separately give `Astrid`, `Hansen` and
+// `mwilliams@example.net`, which is fixture data that looks wrong to
+// anybody who reads it and, worse, is wrong in a way that hides bugs: an
+// importer that silently mismatched a name against an email would pass a
+// suite whose fixtures never matched either.  So `person` draws them
+// together, and its `FakePerson` carries a name whose email is built
+// from it.
+//
+// The separate generators stay, because most tests want one field and
+// should not pay for six.  What they do not do is pretend to be
+// consistent with each other.
+//
+// EVERY EMAIL IS UNDELIVERABLE, ON PURPOSE.  The domains are RFC 2606's
+// reserved names — `example.com`, `example.net`, `example.org` — and
+// `fakename.safe_domain` is where that promise lives.  A fixture
+// generator that produced a real domain is one that will one day be in
+// a test that actually sends, and the person on the other end did not
+// ask for it.  `fakename.email_at` is the escape for a caller that
+// genuinely needs its own domain and has decided so.
+//
+// THE TABLES ARE SMALL AND SAY SO.  A few hundred names per locale, not
+// a corpus: this package's job is plausible data and not a census.  A
+// caller that needs a long tail — a load test, a uniqueness check over
+// a million rows — composes `strategy.map` over
+// `fakeid.digits` and gets exactly the distribution it asked for, rather
+// than discovering that a table of 300 names collides at 500 rows.
+// `fakename.first_name_count` is how a caller finds out before it
+// discovers.
+
+use fake
+use strategy
+
+// A first name.
+//
+// ```novo
+// use fake
+// use fakename
+//
+// fn main() [io]
+//     println(fake.one(fakename.first_name(FakeDa), 42))
+// ```
+pub fn first_name(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakename.first_name")
+
+// A last name.
+//
+// ```novo
+// use fake
+// use fakename
+//
+// fn main() [io]
+//     println(fake.one(fakename.last_name(FakeEn), 42))
+// ```
+pub fn last_name(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakename.last_name")
+
+// A first and a last name, joined the way the locale joins them.
+//
+// ```novo
+// use fake
+// use fakename
+//
+// fn main() [io]
+//     println(fake.one(fakename.full_name(FakeEn), 42))
+// ```
+pub fn full_name(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakename.full_name")
+
+// A title that goes in front of a name: `Dr`, `Ms`, `Hr`, `Fru`.
+//
+// Drawn separately rather than folded into `full_name`, because most
+// records do not have one and a fixture where every person is a doctor
+// is a fixture that has stopped resembling data.
+//
+// ```novo
+// use fake
+// use fakename
+//
+// fn main() [io]
+//     println(fake.one(fakename.name_prefix(FakeDa), 42))
+// ```
+pub fn name_prefix(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakename.name_prefix")
+
+// A suffix that goes after a name: `Jr`, `III`, `PhD`.
+//
+// Empty in `FakeDa`, because Danish does not use them — and a generator
+// that invented some would be producing data a Danish consumer would
+// recognise as wrong.  A locale with no suffixes answers the empty
+// string, which is what `full_name` composes against.
+//
+// ```novo
+// use fake
+// use fakename
+//
+// fn main() [io]
+//     println("[${fake.one(fakename.name_suffix(FakeDa), 42)}]")   // []
+// ```
+pub fn name_suffix(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakename.name_suffix")
+
+// A username: lowercase, ASCII, no spaces.
+//
+// **ASCII even in `FakeDa`**, and that is a decision rather than a
+// limitation: `søren.jørgensen` is a name and not a username on most of
+// the systems a test is standing in for, so the Danish generator folds
+// `æ ø å` to `ae oe aa` the way a Danish person filling in a form does.
+// A caller testing what happens to a non-ASCII username wants
+// `first_name` and a `strategy.map`, and should, because that is a
+// deliberate test rather than an accident of the fixture.
+//
+// ```novo
+// use fake
+// use fakename
+//
+// fn main() [io]
+//     println(fake.one(fakename.username(FakeDa), 42))
+// ```
+pub fn username(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakename.username")
+
+// An email address at a reserved domain.
+//
+// The local part is a `username` and the domain is `safe_domain`, so
+// nothing this generates can be delivered anywhere.
+//
+// ```novo
+// use fake
+// use fakename
+//
+// fn main() [io]
+//     println(fake.one(fakename.email(FakeEn), 42))
+// ```
+pub fn email(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakename.email")
+
+// An email address at a domain the caller names.
+//
+// **The escape from the reserved-domain promise, and it is explicit on
+// purpose.**  A caller that genuinely needs `@acme.test` passes it and
+// has decided so at the call site, where a reviewer can see it — rather
+// than a flag somewhere that quietly makes every fixture deliverable.
+//
+// ```novo
+// use fake
+// use fakename
+//
+// fn main() [io]
+//     println(fake.one(fakename.email_at(FakeEn, "acme.test"), 42))
+// ```
+pub fn email_at(loc: FakeLocale, domain: Str) -> PropStrategy<Str>
+    todo("fake-nv.fakename.email_at")
+
+// A domain nothing resolves: `example.com`, `example.net`,
+// `example.org`.
+//
+// RFC 2606 reserves them for exactly this, and it is the reason a
+// fixture from this package cannot end up in a test that actually
+// sends.
+//
+// ```novo
+// use fake
+// use fakename
+//
+// fn main() [io]
+//     println(fake.one(fakename.safe_domain(), 42))
+// ```
+pub fn safe_domain() -> PropStrategy<Str>
+    todo("fake-nv.fakename.safe_domain")
+
+// A person whose fields agree with each other.
+//
+// ```novo
+// use fake
+// use fakename
+//
+// fn main() [io]
+//     let p = fake.one(fakename.person(FakeDa), 42)
+//     println("${p.full_name} <${p.email}>")
+// ```
+pub struct FakePerson
+    // The first name.
+    first_name: Str
+    // The last name.
+    last_name: Str
+    // The two joined the way the locale joins them, with a prefix when
+    // this person has one.
+    full_name: Str
+    // A username derived from the name, ASCII and lowercase.
+    username: Str
+    // An email at a reserved domain, whose local part is `username`.
+    email: Str
+    // A telephone number in the locale's shape.
+    phone: Str
+
+// A whole person, drawn once so the fields agree.
+//
+// **The generator most tests should reach for.**  A record whose email
+// does not match its name is fixture data that looks wrong to a reader
+// and hides the class of bug where a system mismatches the two.
+//
+// ```novo
+// use fake
+// use fakename
+//
+// fn main() [io]
+//     println(fake.one(fakename.person(FakeEn), 42).first_name)
+// ```
+pub fn person(loc: FakeLocale) -> PropStrategy<FakePerson>
+    todo("fake-nv.fakename.person")
+
+// How many first names this locale's table holds.
+//
+// **The number a caller needs before it discovers.**  These tables are a
+// few hundred names, not a census, so a fixture of a thousand rows with
+// a unique-name constraint will collide — and finding that out from this
+// function is better than finding it out from a flaky test.  A caller
+// that needs more composes a name with `fakeid.digits`.
+//
+// ```novo
+// use fakename
+//
+// fn main() [io]
+//     println("${fakename.first_name_count(FakeEn) > 0}")   // true
+// ```
+pub fn first_name_count(loc: FakeLocale) -> Int
+    todo("fake-nv.fakename.first_name_count")
+
+// How many last names this locale's table holds.
+//
+// ```novo
+// use fakename
+//
+// fn main() [io]
+//     println("${fakename.last_name_count(FakeDa) > 0}")    // true
+// ```
+pub fn last_name_count(loc: FakeLocale) -> Int
+    todo("fake-nv.fakename.last_name_count")

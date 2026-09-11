@@ -1,0 +1,233 @@
+// fake.nv — the locale, and the three calls that turn a generator into
+// values.
+//
+// A FAKE IS A STRATEGY.  Not a wrapper around one, not a thing that can
+// be converted into one: `fakename.first_name(FakeEn)` answers a
+// `PropStrategy<Str>`, which is proptest-core-nv's own type, and every
+// combinator in that package works on it.  A fixture and a property test
+// therefore draw from one source, and a suite that wants "a hundred
+// plausible customers, and also the property that the importer never
+// loses one" writes one generator and uses it twice.
+//
+// WHY THAT, AND NOT A GENERATOR TYPE OF OUR OWN.  Three reasons, and the
+// first is not a preference:
+//
+//   1. **The layer decided it.**  A `core` package may depend only on
+//      `core` packages.  rand-nv is `host` — it declares `[fs, rand]`,
+//      because half of it is the operating system's CSPRNG — so the
+//      plan's other option, "a function of a rand-nv state", is not
+//      reachable from this layer at all.  proptest-core-nv is `core`,
+//      and its `Tape` is a seeded splitmix64 with no effect in it.
+//   2. **A second generator type would be a second ecosystem.**
+//      `strategy.list_of`, `strategy.option_of`, `strategy.map` and
+//      `strategy.one_of` are exactly the combinators a fixture wants —
+//      twenty of these, optionally absent, mapped into a caller's own
+//      struct — and reimplementing them here would be a hundred
+//      functions that do the same thing under different names.
+//   3. **One transcript.**  A failure in a property test that used a
+//      fake reproduces from the tape, and the tape does not know or care
+//      which of its draws were "fake" and which were "property".
+//
+// DOES A FAKE SHRINK?  The question the row on the grid asks, and the
+// answer is YES, which is not the obvious one.  Shrinking in
+// proptest-core-nv is arithmetic on the CHOICE SEQUENCE and not on the
+// value, so anything that draws through the tape shrinks for free — a
+// name drawn as an index into a table shrinks towards index 0, which is
+// the first name in the table.
+//
+// What a fake does not do is shrink *meaningfully in its domain*:
+// "Zdenka Sørensen" shrinking to "Aaron" is arithmetic and not
+// simplification a reader would have chosen.  In practice that is fine
+// and occasionally better than fine — a counterexample reported with the
+// first name in the table is a counterexample whose name is not the
+// point, which is usually exactly true.  A test that wants a specific
+// shrink writes `strategy.just`.
+//
+// THE SEED IS THE WHOLE CONTRACT.  Every generator is a pure function of
+// the tape it is handed, so `fake.one(g, 42)` is the same value on every
+// machine, every run, every toolchain that agrees on `tape.split_step`.
+// `fake.seed_line` is the line a failing test should print, and it is
+// the line a person pastes back.
+//
+// THE LOCALE IS A VALUE THE CALLER PASSES, never a global and never a
+// default.  A library with a global locale is a library where one test
+// changes another's data, and a default locale is a library that makes
+// English the unmarked case — which is wrong for this project and wrong
+// for the first Danish consumer.  Every generator that could differ by
+// locale takes one.
+
+use strategy
+use tape
+
+// Which locale a generator draws from.
+//
+// Two shipped, and the pair is deliberate rather than a start: one
+// locale is a library that cannot be tested for locale-dependence at
+// all, and two is the smallest number that proves the seam.  `en` and
+// `da` because this project's first consumers are in both, and because
+// Danish exercises the parts an English-only fake never does — `æ`, `ø`
+// and `å` in a name, a postcode that is four digits and not five, a
+// phone number that is eight digits with no area code, and a street
+// name that comes before its number.
+//
+// A third locale is a table and no new code, which is the point of the
+// value being a parameter.
+//
+// ```novo
+// use fake
+//
+// fn main() [io]
+//     println(fake.locale_name(FakeDa))                     // da
+// ```
+pub enum FakeLocale
+    // English, as spoken in the United States: five-digit postcodes,
+    // a number before the street name, a ten-digit telephone number.
+    FakeEn
+    // Danish: four-digit postcodes, the number after the street name,
+    // an eight-digit telephone number with no area code, and names
+    // that contain characters an ASCII-only fixture never produces.
+    FakeDa
+
+// The locale's BCP 47 tag.
+//
+// `en` and `da`, which is what a caller writing the seed and the locale
+// into a failure report wants, and what a caller reading one back
+// parses.
+//
+// ```novo
+// use fake
+//
+// fn main() [io]
+//     println(fake.locale_name(FakeEn))                     // en
+// ```
+pub fn locale_name(loc: FakeLocale) -> Str
+    todo("fake-nv.fake.locale_name")
+
+// The locale a tag names, or `None` for one this package does not ship.
+//
+// For a caller taking the locale from a configuration file or a command
+// line.  `None` rather than a silent fall back to English: a test that
+// asked for `de` and got American addresses is a test whose failure
+// nobody can explain.
+//
+// ```novo
+// use fake
+//
+// fn main() [io]
+//     match fake.locale_of("de")
+//         Some(_) => println("shipped")
+//         None    => println("not shipped")                 // this one
+// ```
+pub fn locale_of(tag: Str) -> ?FakeLocale
+    todo("fake-nv.fake.locale_of")
+
+// Every locale this package ships.
+//
+// A list rather than a comment, because a test that wants to run its
+// fixtures under all of them loops over this and keeps working when a
+// third arrives.
+//
+// ```novo
+// use fake
+// use std.list
+//
+// fn main() [io]
+//     println("${list.len(fake.locales())}")                // 2
+// ```
+pub fn locales() -> [FakeLocale]
+    todo("fake-nv.fake.locales")
+
+// **One value from a generator and a seed.**
+//
+// The call a fixture makes.  The same seed gives the same value on every
+// machine and every run, which is the whole contract: a test that fails
+// on seed 42 fails on seed 42 tomorrow, on somebody else's laptop, on
+// the build machine.
+//
+// ```novo
+// use fake
+// use fakename
+//
+// fn main() [io]
+//     println(fake.one(fakename.first_name(FakeEn), 42))
+// ```
+pub fn one<T>(g: PropStrategy<T>, seed: Int) -> T
+    todo("fake-nv.fake.one")
+
+// `n` values from a generator and a seed.
+//
+// Drawn from ONE tape in sequence, so the values differ from each other
+// — which is what a caller seeding a database wants and what `n` calls
+// to `one` with the same seed would not give.  A caller that wants `n`
+// copies of one value wants `list.repeat`.
+//
+// ```novo
+// use fake
+// use fakename
+// use std.list
+//
+// fn main() [io]
+//     let names = fake.many(fakename.first_name(FakeEn), 42, 10)
+//     println("${list.len(names)}")                         // 10
+// ```
+pub fn many<T>(g: PropStrategy<T>, seed: Int, n: Int) -> [T]
+    todo("fake-nv.fake.many")
+
+// A value and the tape that follows it.
+//
+// The composing form: for a caller drawing several different generators
+// from one seed, where each draw has to continue where the last one
+// stopped.  `one` and `many` are this with the tape made and dropped
+// inside.
+//
+// ```novo
+// use fake
+// use fakename
+// use fakeplace
+// use tape
+//
+// fn main() [io]
+//     let t0 = tape.from_seed(42)
+//     let (name, t1) = fake.draw(fakename.full_name(FakeDa), t0)
+//     let (city, t2) = fake.draw(fakeplace.city(FakeDa), t1)
+//     println("${name} — ${city}")
+// ```
+pub fn draw<T>(g: PropStrategy<T>, t: Tape) -> (T, Tape)
+    todo("fake-nv.fake.draw")
+
+// The line a failing test should print.
+//
+// `fake seed: 42 (en)` — the seed and the locale, which together are
+// everything needed to reproduce the data.  One line, one shape, so a
+// person reading a build log recognises it and a script can find it.
+//
+// It exists rather than being left to each caller because the value of a
+// reproducible fixture is entirely in somebody actually printing the
+// seed, and a library that only made it possible would find that most
+// suites did not.
+//
+// ```novo
+// use fake
+//
+// fn main() [io]
+//     println(fake.seed_line(42, FakeEn))                   // fake seed: 42 (en)
+// ```
+pub fn seed_line(seed: Int, loc: FakeLocale) -> Str
+    todo("fake-nv.fake.seed_line")
+
+// The seed and locale a `seed_line` carried, or `None`.
+//
+// The other half: a person pastes the line from a build log into a test
+// and gets the run back.  `None` for a line that is not one, so a caller
+// reading a log file can skip everything else.
+//
+// ```novo
+// use fake
+//
+// fn main() [io]
+//     match fake.parse_seed_line("fake seed: 42 (en)")
+//         Some(_) => println("reproducible")                // this one
+//         None    => println("not a seed line")
+// ```
+pub fn parse_seed_line(line: Str) -> ?(Int, FakeLocale)
+    todo("fake-nv.fake.parse_seed_line")

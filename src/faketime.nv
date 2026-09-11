@@ -1,0 +1,215 @@
+// faketime.nv — dates, over calendar-nv's civil types.
+//
+// **THERE IS NO "NOW" IN THIS MODULE, AND THAT IS NOT A GAP.**  Every
+// other fake library has `past_date()` and `future_date()` meaning
+// "relative to this instant", and every one of them produces fixtures
+// that stop being reproducible the moment the clock moves: a test that
+// passed in December because its fixture was "a date in the last year"
+// fails in January for a reason that has nothing to do with the code.
+//
+// A `core` package has no clock to consult even if it wanted one, so the
+// question never arises here: `before` and `after` take the date they
+// are relative to, and a caller that genuinely means "before today"
+// passes today's date from the host that has one.  The fixture is then
+// reproducible from a seed AND a date, both of which a failure report
+// can carry.
+//
+// THE TYPE IS calendar-nv's `CivilDate`, not a string and not an
+// integer.  A date that arrives as `"2026-09-11"` makes every caller
+// parse it before it can do anything, and a date that arrives as an
+// epoch day makes every caller convert it.  `CivilDate` is the type this
+// grid already means when it says "a date", and calendar-nv's
+// `iso8601.format_date` is one call away for a caller that wants the
+// string.
+//
+// NO TIME ZONES.  A `CivilDateTime` is a wall-clock reading with no
+// offset, which is what a fixture for a birthday, a due date or an
+// invoice line actually is.  A fixture that needs a zoned instant needs
+// chrono-nv, which is `host` — and a `core` package may not reach it.
+// Naming that here rather than producing a `Str` with a `Z` on the end
+// is the honest answer.
+
+use fake
+use civil
+
+// A date in `lo ..= hi`, inclusive at both ends.
+//
+// The one generator this module is really made of: every other function
+// here is this with the bounds worked out.
+//
+// `lo` after `hi` answers `lo` and draws nothing, because a generator
+// has nowhere to put a refusal — and a caller that swapped its bounds
+// gets a constant rather than a panic, which is the failure a test will
+// notice.
+//
+// ```novo
+// use fake
+// use faketime
+// use civil
+// use iso8601
+//
+// fn main() [io]
+//     match civil.date(2020, 1, 1)
+//         Err(_) => println("not a date")
+//         Ok(lo) =>
+//             match civil.date(2029, 12, 31)
+//                 Err(_) => println("not a date")
+//                 Ok(hi) =>
+//                     let d = fake.one(faketime.date_between(lo, hi), 42)
+//                     println(iso8601.format_date(d))
+// ```
+pub fn date_between(lo: CivilDate, hi: CivilDate) -> PropStrategy<CivilDate>
+    todo("fake-nv.faketime.date_between")
+
+// A date in the `days` before `anchor`, not including `anchor` itself.
+//
+// **`anchor` is a parameter and not a clock**, which is the whole design
+// of this module: a caller that means "before today" passes today's
+// date from the host, and the fixture is then reproducible from a seed
+// and a date rather than from a seed and a moment.
+//
+// ```novo
+// use fake
+// use faketime
+// use civil
+//
+// fn main() [io]
+//     match civil.date(2026, 9, 11)
+//         Err(_) => println("not a date")
+//         Ok(a)  =>
+//             let d = fake.one(faketime.before(a, 365), 42)
+//             println("${civil.compare_date(d, a) < 0}")    // true
+// ```
+pub fn before(anchor: CivilDate, days: Int) -> PropStrategy<CivilDate>
+    todo("fake-nv.faketime.before")
+
+// A date in the `days` after `anchor`, not including `anchor` itself.
+//
+// ```novo
+// use fake
+// use faketime
+// use civil
+//
+// fn main() [io]
+//     match civil.date(2026, 9, 11)
+//         Err(_) => println("not a date")
+//         Ok(a)  =>
+//             let d = fake.one(faketime.after(a, 30), 42)
+//             println("${civil.compare_date(d, a) > 0}")    // true
+// ```
+pub fn after(anchor: CivilDate, days: Int) -> PropStrategy<CivilDate>
+    todo("fake-nv.faketime.after")
+
+// A date of birth for somebody between `min_age` and `max_age` years
+// old on `anchor`.
+//
+// Worth its own function because the arithmetic is where a hand-written
+// fixture goes wrong: an age in years is not a number of days, February
+// 29th exists, and a test of an age boundary written with `anchor`
+// minus `18 * 365` is off by four or five days and so never actually
+// tests the boundary.  calendar-nv's `arith.add_years` gets it right and
+// this is that call with the bounds around it.
+//
+// ```novo
+// use fake
+// use faketime
+// use civil
+//
+// fn main() [io]
+//     match civil.date(2026, 9, 11)
+//         Err(_) => println("not a date")
+//         Ok(a)  =>
+//             let d = fake.one(faketime.birthday(a, 18, 80), 42)
+//             println("${d.year < 2026}")                   // true
+// ```
+pub fn birthday(anchor: CivilDate, min_age: Int, max_age: Int) -> PropStrategy<CivilDate>
+    todo("fake-nv.faketime.birthday")
+
+// A wall-clock time of day.
+//
+// Uniform over the whole day including midnight, with whole seconds and
+// no nanoseconds — because a fixture with a nanosecond component fails a
+// round trip through any format that stores milliseconds, and a test
+// that wanted sub-second precision asks for it.
+//
+// ```novo
+// use fake
+// use faketime
+//
+// fn main() [io]
+//     let t = fake.one(faketime.time_of_day(), 42)
+//     println("${t.nano}")                                  // 0
+// ```
+pub fn time_of_day() -> PropStrategy<CivilTime>
+    todo("fake-nv.faketime.time_of_day")
+
+// A time of day inside working hours, `08:00` to `17:59`.
+//
+// For a fixture standing in for something a person did: an audit line, a
+// meeting, an order.  A uniform draw over the day puts a third of them
+// between midnight and eight, which is data no reviewer believes.
+//
+// ```novo
+// use fake
+// use faketime
+//
+// fn main() [io]
+//     let t = fake.one(faketime.business_time(), 42)
+//     println("${t.hour >= 8}")                             // true
+// ```
+pub fn business_time() -> PropStrategy<CivilTime>
+    todo("fake-nv.faketime.business_time")
+
+// A date and a time together.
+//
+// ```novo
+// use fake
+// use faketime
+// use civil
+//
+// fn main() [io]
+//     match civil.date(2026, 1, 1)
+//         Err(_) => println("not a date")
+//         Ok(lo) =>
+//             match civil.date(2026, 12, 31)
+//                 Err(_) => println("not a date")
+//                 Ok(hi) =>
+//                     let dt = fake.one(faketime.datetime_between(lo, hi), 42)
+//                     println("${dt.date.year}")            // 2026
+// ```
+pub fn datetime_between(lo: CivilDate, hi: CivilDate) -> PropStrategy<CivilDateTime>
+    todo("fake-nv.faketime.datetime_between")
+
+// A weekday, excluding Saturday and Sunday.
+//
+// ```novo
+// use fake
+// use faketime
+// use civil
+//
+// fn main() [io]
+//     match civil.date(2026, 9, 14)
+//         Err(_) => println("not a date")
+//         Ok(a)  =>
+//             let d = fake.one(faketime.weekday_after(a, 30), 42)
+//             println("${civil.weekday_number(civil.weekday(d)) <= 5}")   // true
+// ```
+pub fn weekday_after(anchor: CivilDate, days: Int) -> PropStrategy<CivilDate>
+    todo("fake-nv.faketime.weekday_after")
+
+// A duration between `lo` and `hi` seconds.
+//
+// calendar-nv's `TimeDelta`, so it composes with that package's
+// arithmetic rather than being a number a caller has to convert.
+//
+// ```novo
+// use fake
+// use faketime
+// use span
+//
+// fn main() [io]
+//     let d = fake.one(faketime.duration_between(0, 3600), 42)
+//     println("${span.as_seconds(d) <= 3600}")              // true
+// ```
+pub fn duration_between(lo_seconds: Int, hi_seconds: Int) -> PropStrategy<TimeDelta>
+    todo("fake-nv.faketime.duration_between")

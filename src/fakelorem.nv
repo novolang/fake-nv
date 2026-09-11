@@ -1,0 +1,176 @@
+// fakelorem.nv — filler text, in a language a reader can tell is
+// filler.
+//
+// NOT LATIN, AND THAT IS THE DECISION IN THIS MODULE.  Every fake
+// library reaches for `lorem ipsum`, and it is the wrong default for
+// what filler text is actually FOR in a test: exercising the widths, the
+// wrapping, the truncation and the encoding of a text field.  Latin is
+// pure ASCII, its word lengths are unlike either shipped locale's, and
+// it never contains the characters that break things.
+//
+// So `FakeEn` draws from an English word list and `FakeDa` from a Danish
+// one — which means Danish filler contains `æ ø å`, and a field that
+// truncates by byte rather than by character breaks on it in a test
+// rather than in front of somebody.  That is the whole reason a locale
+// reaches this module at all.
+//
+// `lorem` IS STILL HERE, for the caller whose test is about layout and
+// who wants text a reviewer immediately recognises as placeholder.  It
+// takes no locale, because Latin has none.
+//
+// SENTENCES END, AND PARAGRAPHS HAVE MORE THAN ONE.  A sentence is
+// capitalised and ends in a full stop; a paragraph is several sentences
+// joined with a space.  Those are the rules, and they are rules rather
+// than an accident because a fixture that generated `foo bar baz` where
+// a system expected prose exercises none of what it was supposed to.
+//
+// THE LENGTHS ARE DRAWN SMALL-FIRST.  `strategy.next_small` biases a
+// size towards its low end, so `sentences(loc, 1, 20)` mostly produces
+// two or three and occasionally twenty.  A uniform draw would make every
+// fixture paragraph the same size, which is the distribution least like
+// real text.
+
+use fake
+use strategy
+
+// One word.
+//
+// ```novo
+// use fake
+// use fakelorem
+//
+// fn main() [io]
+//     println(fake.one(fakelorem.word(FakeDa), 42))
+// ```
+pub fn word(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakelorem.word")
+
+// Between `lo` and `hi` words, joined with single spaces.
+//
+// No capital letter and no full stop: this is a phrase, for a title, a
+// tag or a search term.  `sentence` is the one with punctuation.
+//
+// ```novo
+// use fake
+// use fakelorem
+//
+// fn main() [io]
+//     println(fake.one(fakelorem.words(FakeEn, 2, 5), 42))
+// ```
+pub fn words(loc: FakeLocale, lo: Int, hi: Int) -> PropStrategy<Str>
+    todo("fake-nv.fakelorem.words")
+
+// One sentence: capitalised, and ending in a full stop.
+//
+// ```novo
+// use fake
+// use fakelorem
+//
+// fn main() [io]
+//     println(fake.one(fakelorem.sentence(FakeDa), 42))
+// ```
+pub fn sentence(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakelorem.sentence")
+
+// Between `lo` and `hi` sentences, joined with a space.
+//
+// The count is drawn small-first, so a run of fixtures is mostly short
+// and occasionally long — which is the distribution real text has and a
+// uniform draw does not.
+//
+// ```novo
+// use fake
+// use fakelorem
+//
+// fn main() [io]
+//     println(fake.one(fakelorem.sentences(FakeEn, 1, 4), 42))
+// ```
+pub fn sentences(loc: FakeLocale, lo: Int, hi: Int) -> PropStrategy<Str>
+    todo("fake-nv.fakelorem.sentences")
+
+// One paragraph: several sentences.
+//
+// ```novo
+// use fake
+// use fakelorem
+//
+// fn main() [io]
+//     println(fake.one(fakelorem.paragraph(FakeEn), 42))
+// ```
+pub fn paragraph(loc: FakeLocale) -> PropStrategy<Str>
+    todo("fake-nv.fakelorem.paragraph")
+
+// Between `lo` and `hi` paragraphs, joined with a blank line.
+//
+// A blank line rather than a single newline, because that is what makes
+// the result a document a Markdown renderer, a text wrapper or a diff
+// treats as several paragraphs — which is what a test of one is for.
+//
+// ```novo
+// use fake
+// use fakelorem
+//
+// fn main() [io]
+//     println(fake.one(fakelorem.paragraphs(FakeDa, 1, 3), 42))
+// ```
+pub fn paragraphs(loc: FakeLocale, lo: Int, hi: Int) -> PropStrategy<Str>
+    todo("fake-nv.fakelorem.paragraphs")
+
+// Text of about `n` bytes.
+//
+// **About, not exactly**, and the name does not pretend otherwise: text
+// is made of words and words have lengths, so the result is the longest
+// run of whole words that fits.  A caller that needs exactly `n` bytes
+// wants `fakeid.hex`, which has no word boundaries to respect.
+//
+// The generator a caller sizing a column or a payload reaches for:
+// "give me roughly four kilobytes of prose" is the question, and
+// counting words to get there is not the caller's job.
+//
+// ```novo
+// use fake
+// use fakelorem
+// use std.str
+//
+// fn main() [io]
+//     let t = fake.one(fakelorem.text_of_about(FakeEn, 4096), 42)
+//     println("${str.len(t) <= 4096}")                      // true
+// ```
+pub fn text_of_about(loc: FakeLocale, n: Int) -> PropStrategy<Str>
+    todo("fake-nv.fakelorem.text_of_about")
+
+// Classical `lorem ipsum`, for a test about layout.
+//
+// Takes no locale, because Latin has none — and it is the wrong default
+// for everything else, because it is pure ASCII and so exercises none of
+// the encoding, width or truncation behaviour a text field has.  It is
+// here for the one case it is right for: filler a reviewer should
+// immediately recognise as filler.
+//
+// ```novo
+// use fake
+// use fakelorem
+//
+// fn main() [io]
+//     println(fake.one(fakelorem.lorem(3), 42))
+// ```
+pub fn lorem(words: Int) -> PropStrategy<Str>
+    todo("fake-nv.fakelorem.lorem")
+
+// A word list this locale draws from, for a caller that wants to see it.
+//
+// Public because a caller checking a uniqueness constraint, or building
+// its own generator over a different distribution, needs the table
+// rather than a generator over it — and because a table that can be
+// read is a table a reviewer can check for a word nobody wants in a
+// demo.
+//
+// ```novo
+// use fakelorem
+// use std.list
+//
+// fn main() [io]
+//     println("${list.len(fakelorem.words_of(FakeEn)) > 0}")    // true
+// ```
+pub fn words_of(loc: FakeLocale) -> [Str]
+    todo("fake-nv.fakelorem.words_of")

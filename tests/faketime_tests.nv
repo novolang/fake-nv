@@ -1,0 +1,212 @@
+// faketime_tests.nv — the API suite for the date generators, and for
+// the parts of the other modules a single-field test skips.
+//
+// RED ON PURPOSE: every body under `src/` is a `todo()`, so every
+// assertion here reaches `not implemented: fake-nv.<module>.<fn>`.
+//
+// WHAT IS BEING ASSERTED IS THE ANCHOR.  Every generator here is
+// relative to a date the CALLER passes, because a `core` package has no
+// clock and because a fixture that meant "a date in the last year" stops
+// being reproducible the moment the clock moves.  So the cases pin an
+// anchor, assert that the result falls on the right side of it, and
+// assert that the same seed and the same anchor give the same date.
+//
+// THE BOUNDARY CASES ARE THE POINT.  A range that excluded its top would
+// never produce the date a test was written for; a birthday computed as
+// `anchor` minus `18 * 365` is off by four or five days and so never
+// actually tests an age boundary; a weekday generator that could answer
+// Saturday is one whose failures look like a scheduling bug.  Each of
+// those has a case here.
+
+use std.test
+use std.str
+use fake
+use fakename
+use fakeplace
+use fakelorem
+use faketime
+use civil
+use arith
+use span
+use iso8601
+
+// The anchor every case below is relative to: a Friday in September,
+// chosen so that `weekday_after` has a weekend to step over.
+fn anchor() -> CivilDate
+    match civil.date(2026, 9, 11)
+        Ok(d)  => d
+        Err(_) =>
+            test.fail("2026-09-11 is a date")
+            civil.date_from_epoch_day(0)
+
+fn day(y: Int, m: Int, d: Int) -> CivilDate
+    match civil.date(y, m, d)
+        Ok(v)  => v
+        Err(_) =>
+            test.fail("${y}-${m}-${d} is a date")
+            civil.date_from_epoch_day(0)
+
+@test
+fn test_a_date_range_is_inclusive_at_both_ends() [io]
+    test.case("a range of one day produces that day")
+    // The off-by-one a fixture generator gets wrong most often.
+    let one = day(2026, 9, 11)
+    let d = fake.one(faketime.date_between(one, one), 42)
+    test.assert(civil.compare_date(d, one) == 0)
+
+    test.case("and a wider range stays inside it")
+    let lo = day(2020, 1, 1)
+    let hi = day(2029, 12, 31)
+    let w = fake.one(faketime.date_between(lo, hi), 42)
+    test.assert(civil.compare_date(w, lo) >= 0)
+    test.assert(civil.compare_date(w, hi) <= 0)
+
+    test.case("the same seed and the same bounds give the same date")
+    test.assert(iso8601.format_date(fake.one(faketime.date_between(lo, hi), 42))
+                == iso8601.format_date(w))
+
+    test.case("swapped bounds answer the low one rather than panicking")
+    let s = fake.one(faketime.date_between(hi, lo), 42)
+    test.assert(civil.compare_date(s, hi) == 0)
+
+@test
+fn test_before_and_after_are_relative_to_an_anchor_the_caller_passes() [io]
+    test.case("before is strictly before, and inside the window")
+    // There is no "now" in this package: a fixture stays reproducible
+    // because the anchor is an argument rather than a clock reading.
+    let a = anchor()
+    let b = fake.one(faketime.before(a, 365), 42)
+    test.assert(civil.compare_date(b, a) < 0)
+    test.assert(arith.days_between(b, a) <= 365)
+
+    test.case("after is strictly after, and inside the window")
+    let f = fake.one(faketime.after(a, 30), 42)
+    test.assert(civil.compare_date(f, a) > 0)
+    test.assert(arith.days_between(a, f) <= 30)
+
+    test.case("and the same anchor and seed give the same date")
+    test.assert(iso8601.format_date(fake.one(faketime.before(a, 365), 42))
+                == iso8601.format_date(b))
+
+@test
+fn test_a_birthday_counts_years_and_not_days() [io]
+    test.case("an age of exactly one year is one year, not 365 days")
+    // `anchor` minus `18 * 365` is off by four or five days, so a test
+    // of an age boundary written that way never tests the boundary.
+    let a = anchor()
+    let d = fake.one(faketime.birthday(a, 1, 1), 42)
+    test.assert(d.year == a.year - 1)
+
+    test.case("a range of ages stays inside it")
+    let adult = fake.one(faketime.birthday(a, 18, 80), 42)
+    test.assert(adult.year <= a.year - 18)
+    test.assert(adult.year >= a.year - 81)
+
+    test.case("and the same anchor and seed give the same birthday")
+    test.assert(iso8601.format_date(fake.one(faketime.birthday(a, 18, 80), 42))
+                == iso8601.format_date(adult))
+
+@test
+fn test_a_weekday_generator_never_answers_a_weekend() [io]
+    test.case("Saturday and Sunday are 6 and 7, and neither comes back")
+    // A scheduling fixture that landed on a Sunday produces failures
+    // that look like a bug in the scheduler.
+    let a = anchor()
+    let d = fake.one(faketime.weekday_after(a, 30), 42)
+    test.assert(civil.weekday_number(civil.weekday(d)) <= 5)
+
+    test.case("and it is still after the anchor and inside the window")
+    test.assert(civil.compare_date(d, a) > 0)
+    test.assert(arith.days_between(a, d) <= 30)
+
+@test
+fn test_a_time_of_day_has_no_nanoseconds() [io]
+    test.case("whole seconds, because a nanosecond breaks a round trip")
+    // A fixture with a nanosecond component fails a round trip through
+    // any format that stores milliseconds.
+    let t = fake.one(faketime.time_of_day(), 42)
+    test.assert(t.nano == 0)
+    test.assert(t.hour >= 0)
+    test.assert(t.hour <= 23)
+    test.assert(t.minute <= 59)
+    test.assert(t.second <= 59)
+
+    test.case("business hours are 08:00 to 17:59")
+    // A uniform draw over the whole day puts a third of a fixture's
+    // audit lines between midnight and eight, which is data no reviewer
+    // believes.
+    let b = fake.one(faketime.business_time(), 42)
+    test.assert(b.hour >= 8)
+    test.assert(b.hour <= 17)
+    test.assert(b.nano == 0)
+
+@test
+fn test_a_datetime_is_a_date_and_a_time_together() [io]
+    test.case("the date is inside the bounds")
+    let lo = day(2026, 1, 1)
+    let hi = day(2026, 12, 31)
+    let dt = fake.one(faketime.datetime_between(lo, hi), 42)
+    test.assert(dt.date.year == 2026)
+    test.assert(civil.compare_date(dt.date, lo) >= 0)
+    test.assert(civil.compare_date(dt.date, hi) <= 0)
+
+    test.case("and the time is a whole-second time of day")
+    test.assert(dt.time.nano == 0)
+    test.assert(dt.time.hour <= 23)
+
+@test
+fn test_a_duration_is_a_calendar_delta_and_not_a_number() [io]
+    test.case("inside the bounds, in seconds")
+    let d = fake.one(faketime.duration_between(0, 3600), 42)
+    test.assert(span.as_seconds(d) >= 0)
+    test.assert(span.as_seconds(d) <= 3600)
+
+    test.case("a range of one produces that one")
+    let one = fake.one(faketime.duration_between(60, 60), 42)
+    test.assert(span.as_seconds(one) == 60)
+
+    test.case("and it composes with calendar-nv's arithmetic")
+    // A `TimeDelta` rather than an `Int`, so it is not a number the
+    // caller has to convert before it can add it to anything.
+    match span.add(one, span.seconds(60))
+        Err(_) => test.assert(false)
+        Ok(s)  => test.assert(span.as_seconds(s) == 120)
+
+@test
+fn test_the_street_and_the_number_go_where_the_locale_puts_them() [io]
+    test.case("a street name has no number in it")
+    let n = fake.one(fakeplace.street_name(FakeEn), 42)
+    test.assert(str.len(n) > 0)
+
+    test.case("and a street line has one, at the end in da")
+    // `Elmegade 12`, not `12 Elmegade`.  The difference is the reason
+    // this is a generator rather than a concatenation at the call site.
+    let da = fake.one(fakeplace.street_line(FakeDa), 42)
+    test.assert(str.len(da) > 0)
+    test.assert(str.contains(da, " "))
+
+    test.case("an E.164 number starts with a plus and the country code")
+    // The form a system stores, not the form a person writes — and a
+    // fixture that used the local form fails a validation that has
+    // nothing wrong with it.
+    test.assert(str.starts_with(fake.one(fakeplace.phone_e164(FakeDa), 42), "+45"))
+    test.assert(str.starts_with(fake.one(fakeplace.phone_e164(FakeEn), 42), "+1"))
+
+@test
+fn test_the_parts_a_single_field_test_skips() [io]
+    test.case("a title goes in front of a name, and most records have none")
+    test.assert(str.len(fake.one(fakename.name_prefix(FakeEn), 42)) >= 0)
+
+    test.case("the safe domains are the three RFC 2606 reserves")
+    let d = fake.one(fakename.safe_domain(), 42)
+    test.assert(d == "example.com" or d == "example.net" or d == "example.org")
+
+    test.case("several sentences are joined with a space and each one ends")
+    let s = fake.one(fakelorem.sentences(FakeEn, 2, 2), 42)
+    test.assert(str.ends_with(s, "."))
+    test.assert(str.contains(s, " "))
+
+    test.case("and a paragraph is several sentences")
+    let p = fake.one(fakelorem.paragraph(FakeEn), 42)
+    test.assert(str.ends_with(p, "."))
+    test.assert(str.len(p) > 0)

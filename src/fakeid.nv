@@ -1,0 +1,228 @@
+// fakeid.nv — identifiers, numbers and choices.
+//
+// **A UUID COMES BACK AS TEXT, AND THE LAYER IS WHY.**  uuid-nv is the
+// package that owns the `Uuid` type, and it is `host`: it depends on
+// rand-nv, which declares `[fs, rand]` because half of it is the
+// operating system's CSPRNG.  A `core` package may depend only on `core`
+// packages, so this one cannot name `Uuid` at all.
+//
+// What it can do is produce the canonical lowercase text — the
+// thirty-six characters RFC 9562 § 4 defines, with the version and
+// variant nibbles set correctly — which is what a fixture writes into a
+// column, a JSON document or a URL anyway.  A caller that wants the type
+// hands the text to `uuid.parse`, which is one call and no dependency
+// here.
+//
+// It is a genuine cost and it is worth naming: a caller using both
+// packages converts at the boundary.  The alternative was fake-nv at
+// `host`, which would put every fixture generator out of reach of every
+// `core` package that wanted one, and that is the worse trade.
+//
+// THE RANDOMNESS IS NOT RANDOM, AND THESE UUIDS ARE NOT UNIQUE.  Every
+// value here is a pure function of the tape, so the same seed gives the
+// same UUID — which is the whole point for a fixture and a disaster if
+// anybody mistook it for `uuid.v4`.  A v4 from this module has 122 bits
+// drawn from a splitmix64 stream a reader can reproduce, so it is
+// unpredictable to nobody.  `fakeid` is for filling a column; `uuid-nv`
+// is for minting an identifier.
+//
+// `choice` AND `weighted_choice` ARE NOT HERE, on purpose.
+// proptest-core-nv already publishes `strategy.sample_of`,
+// `strategy.one_of` and `strategy.weighted_of`, and a fake IS a
+// strategy — so re-exporting them under new names would be two spellings
+// of one function and a reader wondering which is which.  The README
+// says where to find them.
+
+use fake
+use strategy
+
+// A version 4 UUID, as canonical lowercase text.
+//
+// Thirty-six characters, RFC 9562 § 4's form, with the version nibble
+// set to 4 and the variant bits to `10` — so `uuid.parse` accepts it and
+// `uuid.version` answers 4.
+//
+// **Not `uuid.v4`.**  The 122 bits come from the tape, so the same seed
+// gives the same identifier every time.  That is what a fixture wants
+// and what an identifier must never be.
+//
+// ```novo
+// use fake
+// use fakeid
+// use std.str
+//
+// fn main() [io]
+//     let id = fake.one(fakeid.uuid_v4(), 42)
+//     println("${str.len(id)}")                             // 36
+// ```
+pub fn uuid_v4() -> PropStrategy<Str>
+    todo("fake-nv.fakeid.uuid_v4")
+
+// A version 7 UUID, as canonical lowercase text, at a millisecond the
+// caller supplies.
+//
+// **The timestamp is a parameter, not a clock.**  A `core` package has
+// no clock, and a v7 whose timestamp came from one would not be
+// reproducible even from a seed — which would defeat the only promise
+// this package makes.  So the caller passes the Unix millisecond, and a
+// fixture of a hundred events over an hour passes a hundred different
+// ones and gets identifiers that sort in that order.
+//
+// ```novo
+// use fake
+// use fakeid
+// use std.str
+//
+// fn main() [io]
+//     let id = fake.one(fakeid.uuid_v7(1767225600000), 42)
+//     println("${str.len(id)}")                             // 36
+// ```
+pub fn uuid_v7(unix_ms: Int) -> PropStrategy<Str>
+    todo("fake-nv.fakeid.uuid_v7")
+
+// Exactly `n` decimal digits, as text, leading zeros kept.
+//
+// Text rather than an integer because that is what an account number, a
+// national identifier or a padded reference IS — and a fixture that
+// produced `42` where a system expected `0000000042` exercises the
+// wrong path.
+//
+// ```novo
+// use fake
+// use fakeid
+// use std.str
+//
+// fn main() [io]
+//     println("${str.len(fake.one(fakeid.digits(10), 42))}")    // 10
+// ```
+pub fn digits(n: Int) -> PropStrategy<Str>
+    todo("fake-nv.fakeid.digits")
+
+// Exactly `n` lowercase hexadecimal characters.
+//
+// The generator for an opaque token, an object name or a content hash
+// standing in for a real one — and the one to reach for when a fixture
+// needs exactly `n` bytes of text, because unlike prose it has no word
+// boundaries to respect.
+//
+// ```novo
+// use fake
+// use fakeid
+// use std.str
+//
+// fn main() [io]
+//     println("${str.len(fake.one(fakeid.hex(64), 42))}")   // 64
+// ```
+pub fn hex(n: Int) -> PropStrategy<Str>
+    todo("fake-nv.fakeid.hex")
+
+// An identifier with a prefix: `inv_8f2a91`, `cus_0d14be`.
+//
+// The shape almost every service's public identifiers have, because a
+// prefixed identifier is one a person reading a log can attribute
+// without a schema.  `suffix_len` hexadecimal characters after the
+// prefix.
+//
+// ```novo
+// use fake
+// use fakeid
+//
+// fn main() [io]
+//     println(fake.one(fakeid.prefixed("inv_", 6), 42))
+// ```
+pub fn prefixed(prefix: Str, suffix_len: Int) -> PropStrategy<Str>
+    todo("fake-nv.fakeid.prefixed")
+
+// An integer in `lo ..= hi`, inclusive at both ends.
+//
+// `strategy.int_range` is the same function and this is the one whose
+// name says "inclusive" — which is the off-by-one a fixture generator
+// gets wrong most often, because a range that excluded its top would
+// never produce the boundary a test was written for.
+//
+// `lo` above `hi` answers `lo` and draws nothing, because a generator
+// has nowhere to put a refusal.
+//
+// ```novo
+// use fake
+// use fakeid
+//
+// fn main() [io]
+//     println("${fake.one(fakeid.number_between(1, 10), 42) <= 10}")    // true
+// ```
+pub fn number_between(lo: Int, hi: Int) -> PropStrategy<Int>
+    todo("fake-nv.fakeid.number_between")
+
+// An amount of money in minor units, `lo ..= hi`.
+//
+// **Minor units — cents, øre — and never a `Float`.**  A fixture that
+// generated `19.99` as a floating-point number is a fixture that will
+// one day be `19.989999999999998` in a comparison, and a test that
+// failed for that reason has taught somebody the wrong lesson about
+// their code.  Money is an integer count of the smallest unit, and this
+// is the generator that says so in its name.
+//
+// ```novo
+// use fake
+// use fakeid
+//
+// fn main() [io]
+//     println("${fake.one(fakeid.amount_minor(100, 99999), 42) >= 100}")   // true
+// ```
+pub fn amount_minor(lo: Int, hi: Int) -> PropStrategy<Int>
+    todo("fake-nv.fakeid.amount_minor")
+
+// True with probability `percent` out of a hundred.
+//
+// For a field that is usually set and occasionally is not: a fixture
+// where every optional field is present exercises none of the absent
+// path, and one where they are present half the time does not look like
+// data.  `strategy.option_of` composes with this for the optional
+// itself.
+//
+// `percent` outside `0 ..= 100` is clamped, because a generator has
+// nowhere to put a refusal — and 0 and 100 are both useful, so neither
+// is the value that signals a mistake.
+//
+// ```novo
+// use fake
+// use fakeid
+//
+// fn main() [io]
+//     println("${fake.one(fakeid.likely(100), 42)}")        // true
+// ```
+pub fn likely(percent: Int) -> PropStrategy<Bool>
+    todo("fake-nv.fakeid.likely")
+
+// An IPv4 address in a range documentation reserves.
+//
+// RFC 5737's `192.0.2.0/24`, `198.51.100.0/24` and `203.0.113.0/24`,
+// which exist so that an example cannot name somebody's machine — the
+// same promise `fakename.safe_domain` makes for email.
+//
+// ```novo
+// use fake
+// use fakeid
+//
+// fn main() [io]
+//     println(fake.one(fakeid.ipv4(), 42))
+// ```
+pub fn ipv4() -> PropStrategy<Str>
+    todo("fake-nv.fakeid.ipv4")
+
+// A MAC address in the locally administered range.
+//
+// The second-least-significant bit of the first octet set, which is what
+// makes an address one nobody was assigned — so a fixture cannot name a
+// real network card.
+//
+// ```novo
+// use fake
+// use fakeid
+// use std.str
+//
+// fn main() [io]
+//     println("${str.len(fake.one(fakeid.mac(), 42))}")     // 17
+// ```
+pub fn mac() -> PropStrategy<Str>
+    todo("fake-nv.fakeid.mac")
