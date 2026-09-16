@@ -62,8 +62,9 @@ Three reasons, and the first is not a preference.
 **1. The layer decided it.**  This package is `core`, and a `core`
 package may depend only on `core` packages.  rand-nv is `host` — it
 declares `[fs, rand]`, because half of it is the operating system's
-CSPRNG — so the plan's other option, "a generator that is a function of
-a rand-nv state", is not reachable from this layer at all.
+CSPRNG — so the other shape this package could have taken, "a generator
+that is a function of a rand-nv state", is not reachable from this layer
+at all.
 proptest-core-nv is `core`, and its `Tape` is a seeded splitmix64 with
 no effect anywhere in it.
 
@@ -85,8 +86,7 @@ one — writes one generator and uses it twice.
 
 ### Does a fake shrink?
 
-The question the grid's row asks, and the answer is **yes**, which is
-not the obvious one.
+The answer is **yes**, which is not the obvious one.
 
 Shrinking in proptest-core-nv is arithmetic on the **choice sequence**
 and not on the value, so anything that draws through the tape shrinks
@@ -217,8 +217,8 @@ reproducible from a seed **and** a date, both of which a failure report
 can carry.
 
 The type is calendar-nv's `CivilDate`, not a string and not an epoch
-day, because that is the type this grid already means when it says "a
-date".
+day, because that is the type the other packages on the registry
+already mean when they say "a date".
 
 ## Filler text is not Latin
 

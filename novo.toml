@@ -1,6 +1,6 @@
 [package]
 name        = "fake-nv"
-version     = "0.0.1"
+version     = "0.0.2"
 description = "Deterministic fixture data from a seed: names, addresses, emails, phone numbers, sentences, dates, numbers in a range, choices and UUIDs, in English and Danish, with the locale a value the caller passes.  A fake IS a proptest-core-nv strategy rather than a new kind of thing, so a fixture and a property draw from the same tape and shrink by the same rule — and a test that prints its seed reproduces exactly.  Interface only — every body is a todo()."
 license     = "Apache-2.0"
 
